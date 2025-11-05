@@ -1,0 +1,34 @@
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
+import tensorflow as tf
+import numpy as np
+from PIL import Image
+import io
+
+app = FastAPI()
+
+# Load your trained model
+model = tf.keras.models.load_model("model/plant_model.h5")
+class_names = ['Healthy', 'Bacterial Spot', 'Early Blight', 'Late Blight', 'Leaf Mold']  # Example classes
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
+    try:
+        # Read image
+        image_bytes = await file.read()
+        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        image = image.resize((224, 224))  # Adjust to your model input
+        img_array = np.array(image) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Predict
+        prediction = model.predict(img_array)
+        predicted_class = class_names[np.argmax(prediction)]
+        confidence = float(np.max(prediction))
+
+        return JSONResponse({
+            "prediction": predicted_class,
+            "confidence": confidence
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
